@@ -25,8 +25,8 @@ class RustTuiTriggerButton(ButtonEntity):
     def __init__(self, ip: str, port: int):
         self._ip = ip
         self._port = port
-        self._attr_name = "Signal an Rust TUI"
-        self._attr_unique_id = f"rust_tui_btn_{ip}_{port}"
+        self._attr_name = "Shutdown"
+        self._attr_unique_id = f"rust_tui_shut_{ip}_{port}"
         self._attr_icon = "mdi:terminal"
 
     async def async_press(self) -> None:
