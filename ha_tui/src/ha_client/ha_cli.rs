@@ -1,5 +1,5 @@
 use super::listener::{HaEvent, HaListener};
-use crate::shared_states::{CliMsg, Dashboard, HaCliMsg, UserMsg};
+use crate::models::{CliMsg, Dashboard, HaCliMsg, UserMsg};
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -9,6 +9,9 @@ use tokio::io::AsyncReadExt;
 use std::process::Command;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc::{Receiver, Sender};
+
+use tokio::net::UnixListener;
+use tokio::net::UnixStream;
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct HaEntity {
@@ -29,8 +32,7 @@ pub struct Context {
 }
 
 pub struct HAClient {
-    from_tui: Receiver<UserMsg>,
-    to_tui: Sender<HaCliMsg>,
+    listener: UnixListener;
     client: reqwest::Client,
     running: bool,
     start_time: std::time::Instant,
@@ -38,13 +40,11 @@ pub struct HAClient {
 
 impl HAClient {
     pub fn new(
-        from_tui: Receiver<UserMsg>,
-        to_tui: Sender<HaCliMsg>,
+        listener: UnixListener;
         start_time: std::time::Instant,
     ) -> Self {
         HAClient {
-            from_tui,
-            to_tui,
+            listener,
             client: Self::init_client(),
             running: true,
             start_time,
@@ -72,19 +72,19 @@ impl HAClient {
         // body.iter().for_each(|entity| println!("{:?}", entity.context.clone()));
         self.print_debug_info("Fetched HA-Entitys");
 
-        match self.to_tui.try_send(HaCliMsg::DATA {
-            0: CliMsg {
-                entitys: body.iter().map(|hae| hae.entity_id.clone()).collect(),
-                debug_data: "Sending Entitys...".to_string(),
-                dashboard: Dashboard::Dashboard_SciFi,
-            },
-        }) {
-            Ok(_) => {}
-            Err(_) => {}
-        }
+        // match self.to_tui.try_send(HaCliMsg::DATA {
+        //     0: CliMsg {
+        //         entitys: body.iter().map(|hae| hae.entity_id.clone()).collect(),
+        //         debug_data: "Sending Entitys...".to_string(),
+        //         dashboard: Dashboard::Dashboard_SciFi,
+        //     },
+        // }) {
+        //     Ok(_) => {}
+        //     Err(_) => {}
+        // }
 
         // Listener für HA-Integration
-        let mut listener = HaListener::new(8080).await;
+        //let mut listener = HaListener::new(8080).await;
 
         // Tick für heartbeat
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
@@ -92,12 +92,12 @@ impl HAClient {
         self.print_debug_info("starting Main-Loop");
         while self.running {
             tokio::select! {
-                Some(msg) = self.from_tui.recv() => {
-                    // Updating Entity List and send it
-                    self.handle_incoming(msg);
-                    // send command
-                    // receiving some Data
-                }
+                // Some(msg) = self.from_tui.recv() => {
+                //     // Updating Entity List and send it
+                //     self.handle_incoming(msg);
+                //     // send command
+                //     // receiving some Data
+                // }
 
                 i = interval.tick() => {
                     self.heartbeat().await;
@@ -106,11 +106,17 @@ impl HAClient {
                 // Some(ha_event) = listener.recv_event() => {
                 //     self.handle_incoming_ha_event(ha_event);
                 // }
+                //
+                // Some(event) = listener.receiver.recv() => {
+                //     self.handle_ha_event(event).await;
+                // }
 
-                Some(event) = listener.receiver.recv() => {
-                    self.handle_ha_event(event).await;
+                Ok((stream, _)) = self.listener.accept() => {
+                    println!("neuer Proband");
+                    tokio::spawn(async move {
+                       self.handle_tui_connection(stream).await;
+                    });
                 }
-
 
                 //TODO:
                 // fetch updates from website on a regular basis maybe? like A Watchdog for the connection or something
@@ -119,6 +125,20 @@ impl HAClient {
         }
 
         Ok(())
+    }
+
+
+    async fn handle_tui_connection(&mut self, stream:UnixStream){
+        let (mut reader, mut writer) = stream.into_split();
+        let mut buffer = [0; 1024];
+
+        loop {
+            tokio::select! {
+                result = reader.read(&mut buffer) => {
+                    println!("result");
+                }
+            }
+        }
     }
 
     async fn heartbeat(&mut self) -> Option<i16> {
@@ -167,16 +187,18 @@ impl HAClient {
     }
 
     fn print_debug(&mut self, t: &str, s: &str) {
-        match self.to_tui.try_send(HaCliMsg::DEBUG(format!(
-            "{:?}-[{}]: {}",
-            self.start_time.elapsed().as_millis(),t,s))) {
-            Ok(_) => {
-                println!("");
-            }
-            Err(_) => {
-                println!("MPC: communication failure, Queue full?");
-            }
-        };
+        // match self.to_tui.try_send(HaCliMsg::DEBUG(format!(
+        //     "{:?}-[{}]: {}",
+        //     self.start_time.elapsed().as_millis(),t,s))) {
+        //     Ok(_) => {
+        //         println!("");
+        //     }
+        //     Err(_) => {
+        //         println!("MPC: communication failure, Queue full?");
+        //     }
+        // };
+
+        //senden
     }
 
     fn stop(&mut self) {
@@ -187,7 +209,7 @@ impl HAClient {
     async fn initiate_shutdown(&mut self) {
         self.print_debug_info("SHUTDOWN eingeleitet");
 
-        let tx = self.to_tui.clone();
+        // let tx = self.to_tui.clone();
         tokio::spawn(async move {
 
 
@@ -203,7 +225,7 @@ impl HAClient {
                        let _ = file.read_exact(&mut buf).await;
                     }
                     Err(e) => {
-                        tx.try_send(HaCliMsg::DEBUG("Berechtigunsproblem".into()));
+                        // tx.try_send(HaCliMsg::DEBUG("Berechtigunsproblem".into()));
                         // self.print_debug_error("Berechtigungs Probleme");
                         std::future::pending::<()>().await;
                     }
@@ -214,7 +236,7 @@ impl HAClient {
 
             tokio::select! {
                 _ = timeout => {
-                    tx.try_send(HaCliMsg::DEBUG("SHUTDOWN NOW".into()));
+                    // tx.try_send(HaCliMsg::DEBUG("SHUTDOWN NOW".into()));
                     
                     let result = Command::new("systemctl")
                         .arg("poweroff")
@@ -225,7 +247,7 @@ impl HAClient {
                 }
                 
                 _ = mouse_movement => {
-                    tx.try_send(HaCliMsg::DEBUG("SHUTDOWN abgebrochen".into()));
+                    // tx.try_send(HaCliMsg::DEBUG("SHUTDOWN abgebrochen".into()));
                 }
             }
         });

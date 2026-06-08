@@ -1,11 +1,20 @@
-#[derive(Clone)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize)]
+pub enum SocketMessage {
+    HaData(HaCliMsg),
+    UserAction(UserMsg),
+}
+
+
+#[derive(Clone,Serialize, Deserialize)]
 pub enum HaCliMsg {
     DATA(CliMsg),
     DEBUG(String),
     PACEHOLDER,
 }
 
-#[derive(Clone)]
+#[derive(Clone,Serialize, Deserialize)]
 pub struct CliMsg {
     pub entitys: Vec<String>,
     pub debug_data: String,
@@ -22,12 +31,13 @@ impl CliMsg {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone,Serialize, Deserialize)]
 pub enum Dashboard {
     Dashboard_SciFi,
     Dashboard2,
 }
 
+#[derive(Clone,Serialize, Deserialize)]
 pub enum UserMsg {
     READY,
     RELOAD,

@@ -1,8 +1,8 @@
 use tokio::sync::mpsc::{Receiver, Sender};
-
-use crate::shared_states;
-use crate::shared_states::HaCliMsg::DATA;
-use crate::shared_states::{CliMsg, Dashboard, HaCliMsg, UserMsg};
+use tokio::net::unix::{OwnedWriteHalf,OwnedReadHalf};
+use tokio::io::AsyncReadExt;
+// use ha_tui::models::HaCliMsg::DATA;
+use crate::models::{CliMsg, Dashboard, HaCliMsg, HaCliMsg::DATA, UserMsg};
 use crossterm::event::{self, Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use futures::StreamExt;
 use ratatui::Frame;
@@ -26,11 +26,17 @@ const RECT_HEIGHT: u16 = 2;
 
 const Max_DBG_MSGS: u16 = 20;
 
+// TODO: Use for text input, not ready yet
+enum InputModeE {
+    NORMAL,
+    EDIT_DURATION,
+    EDIT_SPEEDUP,
+}
 // Klasse der TUI-APP mit Membervariablen
 pub struct TuiApp {
     running: bool,
-    from_ha: Receiver<HaCliMsg>,
-    to_ha: Sender<UserMsg>,
+    writer: OwnedWriteHalf,
+    reader: OwnedReadHalf,
     input_mode: InputModeE,
     entities: Vec<String>,
     state: ListState,
@@ -39,27 +45,20 @@ pub struct TuiApp {
     start_time: std::time::Instant,
 }
 
-// TODO: Use for text input, not ready yet
-enum InputModeE {
-    NORMAL,
-    EDIT_DURATION,
-    EDIT_SPEEDUP,
-}
-
 // TODO: Dashboards für bestimmte Zwecke
 // TODO: Pop-Ups
 
 impl TuiApp {
     pub fn new(
-        from_ha: Receiver<HaCliMsg>,
-        to_ha: Sender<UserMsg>,
+    writer: OwnedWriteHalf,
+    reader: OwnedReadHalf,
         start_time: std::time::Instant,
     ) -> Self {
         // Return a new instance of TuiApp
         Self {
             running: false,
-            from_ha,
-            to_ha,
+            writer,
+            reader,
             input_mode: InputModeE::NORMAL,
             entities: Vec::new(),
             state: ListState::default(),
@@ -81,16 +80,21 @@ impl TuiApp {
         // }
 
         let mut data: HaCliMsg = HaCliMsg::PACEHOLDER;
+let mut buffer = [0; 1024];
 
         while self.running {
             tokio::select! {
                 Some(Ok(event)) = self.event_stream.next() => {
                     self.handle_events(event).await;
                 }
-
-                Some(msg) = self.from_ha.recv() => {
-                    data = msg;
+                
+                result = self.reader.read(&mut buffer) => {
+                    data=HaCliMsg::DEBUG(format!("hello"));
                 }
+                //Nachrichten empfangen
+                // Some(msg) = self.from_ha.recv() => {
+                //     data = msg;
+                // }
             }
             terminal
                 .draw(|f| self.render(f, data.clone()))
@@ -323,7 +327,8 @@ impl TuiApp {
     fn put_char(&mut self, k: KeyCode) {}
 
     async fn send_to_ha(&mut self, msg: UserMsg) {
-        self.to_ha.send(msg).await;
+        //self.to_ha.send(msg).await;
+    //TODO? was wollte ich hier machen?
     }
 
     async fn stop(&mut self) {
