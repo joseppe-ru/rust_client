@@ -1,0 +1,11 @@
+{
+  "domain": "rust_tui",
+  "name": "Rust TUI Bridge",
+  "documentation": "https://github.com/joseppe-ru/rust_client",
+  "dependencies": [],
+  "codeowners": ["@joseppe-ru"],
+  "requirements": [],
+  "iot_class": "local_push",
+  "config_flow": true,
+  "version": "0.1.0"
+}
