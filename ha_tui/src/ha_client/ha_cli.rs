@@ -1,5 +1,5 @@
-use super::listener::{HaEvent, HaListener};
-use crate::models::{CliMsg, Dashboard, HaCliMsg, UserMsg};
+use super::listener::HaEvent;
+use crate::models::UserMsg;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -7,8 +7,8 @@ use tokio::fs::File;
 // use std::io::{Read, Write};
 use tokio::io::AsyncReadExt;
 use std::process::Command;
-use std::time::{Duration, Instant};
-use tokio::sync::mpsc::{Receiver, Sender};
+use std::time::Duration;
+
 
 use tokio::net::UnixListener;
 use tokio::net::UnixStream;
@@ -32,7 +32,7 @@ pub struct Context {
 }
 
 pub struct HAClient {
-    listener: UnixListener;
+    listener: UnixListener,
     client: reqwest::Client,
     running: bool,
     start_time: std::time::Instant,
@@ -40,7 +40,7 @@ pub struct HAClient {
 
 impl HAClient {
     pub fn new(
-        listener: UnixListener;
+        listener: UnixListener,
         start_time: std::time::Instant,
     ) -> Self {
         HAClient {
@@ -111,11 +111,19 @@ impl HAClient {
                 //     self.handle_ha_event(event).await;
                 // }
 
-                Ok((stream, _)) = self.listener.accept() => {
+                Ok((mut stream, _)) = self.listener.accept() => {
                     println!("neuer Proband");
+                    let (mut xxx,mut yyy) = stream.into_split();
+                    println!("{:?}",yyy);
+                    println!("{:?}",xxx);
+        
                     tokio::spawn(async move {
-                       self.handle_tui_connection(stream).await;
-                    });
+                        tokio::time::sleep(
+                            tokio::time::Duration::from_secs(60)
+                        ).await;});
+                    // tokio::spawn(async move {
+                    //    self.handle_tui_connection(stream).await;
+                    // });
                 }
 
                 //TODO:

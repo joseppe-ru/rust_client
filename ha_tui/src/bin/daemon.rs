@@ -4,6 +4,6 @@ use tokio::net::UnixListener;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Daemon");
-    run_ha_cli();
+    run_ha_cli().await;
     Ok(())
 }

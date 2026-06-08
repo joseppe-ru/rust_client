@@ -9,6 +9,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("TUI Client gestartet...");
     
 
-    run_tui();
+    run_tui().await;
     Ok(())
 }

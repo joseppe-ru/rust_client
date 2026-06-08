@@ -80,7 +80,7 @@ impl TuiApp {
         // }
 
         let mut data: HaCliMsg = HaCliMsg::PACEHOLDER;
-let mut buffer = [0; 1024];
+        let mut buffer = [0u8; 1024];
 
         while self.running {
             tokio::select! {
@@ -88,8 +88,16 @@ let mut buffer = [0; 1024];
                     self.handle_events(event).await;
                 }
                 
-                result = self.reader.read(&mut buffer) => {
-                    data=HaCliMsg::DEBUG(format!("hello"));
+                Ok(_) = self.reader.readable() => {
+                    
+                    match self.reader.try_read(&mut buffer) {
+                        Ok(0) => println!("EOF"),
+                        Ok(n) => println!("read {} bytes", n),
+                        Err(e) => println!("err {:?}", e),
+                    }
+    
+
+                    self.writer.try_write(b"Hallo");
                 }
                 //Nachrichten empfangen
                 // Some(msg) = self.from_ha.recv() => {

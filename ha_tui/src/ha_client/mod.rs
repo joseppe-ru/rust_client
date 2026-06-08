@@ -11,7 +11,7 @@ pub async fn run_ha_cli() -> eyre::Result<(), &'static str> {
     let time_start = std::time::Instant::now();
 
 
-    let socket_path = "/tmp/mein_projekt.sock";
+    let socket_path = "/tmp/rust_client.sock";
     
     let _ = std::fs::remove_file(socket_path);
 
