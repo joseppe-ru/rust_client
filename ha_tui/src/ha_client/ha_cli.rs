@@ -9,7 +9,7 @@ use std::process::Command;
 use std::time::Duration;
 
 use crate::models::{CliMsg, Dashboard, HaCliMsg, HaCliMsg::DATA, UserMsg};
-
+use crate::ha_client::listener::HaListener;
 
 use tokio::sync::mpsc::{Receiver, Sender};
 
@@ -55,13 +55,13 @@ impl HAClient {
     }
 
     pub async fn run(&mut self) -> Result<(), &'static str> {
-        self.print_debug_info("Welcome to the HA-Client TUI APP");
+        println!("Welcome to the HA-Client TUI APP");
         // -----
         // INITIALIZING
         // -----
 
         let ha_url = "http://10.40.2.101:8123/api/states";
-        self.print_debug_info("Testing connection to HA...");
+        println!("Testing connection to HA...");
         let response = self.client.get(ha_url).send().await.unwrap();
 
         // TODO:
@@ -73,7 +73,7 @@ impl HAClient {
         // Filter for entitys (im interested in all switches and lights)
 
         // body.iter().for_each(|entity| println!("{:?}", entity.context.clone()));
-        self.print_debug_info("Fetched HA-Entitys");
+        println!("Fetched HA-Entitys");
 
         match self.to_tui.try_send(HaCliMsg::DATA {
             0: CliMsg {
@@ -87,20 +87,21 @@ impl HAClient {
         }
 
         // Listener für HA-Integration
-        let mut listener = HaListener::new(8080).await;
+        let mut ha_listener = HaListener::new(8080).await;
 
         // Tick für heartbeat
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
 
-        self.print_debug_info("starting Main-Loop");
+        // self.print_debug_info("starting Main-Loop");
         while self.running {
             tokio::select! {
-                // Some(msg) = self.from_tui.recv() => {
-                //     // Updating Entity List and send it
-                //     self.handle_incoming(msg);
-                //     // send command
-                //     // receiving some Data
-                // }
+                Some(msg) = self.from_tui.recv() => {
+                    // Updating Entity List and send it
+                    // self.handle_incoming(msg);
+                    // send command
+                    // receiving some Data
+                    println!("got message from tui over socket");
+                }
 
                 i = interval.tick() => {
                     self.heartbeat().await;
@@ -110,9 +111,9 @@ impl HAClient {
                 //     self.handle_incoming_ha_event(ha_event);
                 // }
                 //
-                // Some(event) = listener.receiver.recv() => {
-                //     self.handle_ha_event(event).await;
-                // }
+                Some(event) = ha_listener.receiver.recv() => {
+                    self.handle_ha_event(event).await;
+                }
 
                 // Ok((mut stream, _)) = self.listener.accept() => {
                 //     println!("neuer Proband");
@@ -135,26 +136,15 @@ impl HAClient {
     }
 
 
-    // async fn handle_tui_connection(&mut self, stream:UnixStream){
-    //     let (mut reader, mut writer) = stream.into_split();
-    //     let mut buffer = [0; 1024];
-    //
-    //     loop {
-    //         tokio::select! {
-    //             result = reader.read(&mut buffer) => {
-    //                 println!("result");
-    //             }
-    //         }
-    //     }
-    // }
-
     async fn heartbeat(&mut self) -> Option<i16> {
-        self.print_debug_info("Heartbeat");
+        // self.print_debug_info("Heartbeat");
+        println!("Heartbeat");
         None
     }
 
     async fn handle_ha_event(&mut self, event: HaEvent) {
-        self.print_debug_info("Neues Event von HA-Integration");
+        // self.print_debug_info("Neues Event von HA-Integration");
+        println!("HA-Event");
         // match event.event {
         //     String::from("button") => {}
         //     String::from("switch") => {}
@@ -185,25 +175,25 @@ impl HAClient {
         }
     }
 
-    fn print_debug_error(&mut self, msg: &str) {
-        self.print_debug("ERROR", msg);
+    fn send_debug_error(&mut self, msg: &str) {
+        self.send_debug("ERROR", msg);
     }
 
-    fn print_debug_info(&mut self, msg: &str) {
-        self.print_debug("INFO", msg);
+    fn send_debug_info(&mut self, msg: &str) {
+        self.send_debug("INFO", msg);
     }
 
-    fn print_debug(&mut self, t: &str, s: &str) {
-        // match self.to_tui.try_send(HaCliMsg::DEBUG(format!(
-        //     "{:?}-[{}]: {}",
-        //     self.start_time.elapsed().as_millis(),t,s))) {
-        //     Ok(_) => {
-        //         println!("");
-        //     }
-        //     Err(_) => {
-        //         println!("MPC: communication failure, Queue full?");
-        //     }
-        // };
+    fn send_debug(&mut self, t: &str, s: &str) {
+        match self.to_tui.try_send(HaCliMsg::DEBUG(format!(
+            "{:?}-[{}]: {}",
+            self.start_time.elapsed().as_millis(),t,s))) {
+            Ok(_) => {
+                println!("");
+            }
+            Err(_) => {
+                println!("MPC: communication failure, Queue full?");
+            }
+        };
 
         //senden
     }
@@ -214,7 +204,8 @@ impl HAClient {
     }
 
     async fn initiate_shutdown(&mut self) {
-        self.print_debug_info("SHUTDOWN eingeleitet");
+        // self.print_debug_info("SHUTDOWN eingeleitet");
+        println!("SHUTDOWN eingeleitet");
 
         // let tx = self.to_tui.clone();
         tokio::spawn(async move {
@@ -233,7 +224,8 @@ impl HAClient {
                     }
                     Err(e) => {
                         // tx.try_send(HaCliMsg::DEBUG("Berechtigunsproblem".into()));
-                        // self.print_debug_error("Berechtigungs Probleme");
+                        // self.print_debug_error("Berechtigungs Probleme");gugu
+                        println!("Berechtigungsproblem beim Shutdown");
                         std::future::pending::<()>().await;
                     }
                 }
@@ -244,6 +236,7 @@ impl HAClient {
             tokio::select! {
                 _ = timeout => {
                     // tx.try_send(HaCliMsg::DEBUG("SHUTDOWN NOW".into()));
+                    println!("Shutdown Now");
                     
                     let result = Command::new("systemctl")
                         .arg("poweroff")
@@ -255,6 +248,7 @@ impl HAClient {
                 
                 _ = mouse_movement => {
                     // tx.try_send(HaCliMsg::DEBUG("SHUTDOWN abgebrochen".into()));
+                    println!("Shutdown Abgebrochen");
                 }
             }
         });
