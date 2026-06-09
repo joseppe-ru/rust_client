@@ -1,5 +1,4 @@
 use super::listener::HaEvent;
-use crate::models::UserMsg;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -9,9 +8,10 @@ use tokio::io::AsyncReadExt;
 use std::process::Command;
 use std::time::Duration;
 
+use crate::models::{CliMsg, Dashboard, HaCliMsg, HaCliMsg::DATA, UserMsg};
 
-use tokio::net::UnixListener;
-use tokio::net::UnixStream;
+
+use tokio::sync::mpsc::{Receiver, Sender};
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct HaEntity {
@@ -32,7 +32,8 @@ pub struct Context {
 }
 
 pub struct HAClient {
-    listener: UnixListener,
+    from_tui: Receiver<UserMsg>,
+    to_tui: Sender<HaCliMsg>,
     client: reqwest::Client,
     running: bool,
     start_time: std::time::Instant,
@@ -40,11 +41,13 @@ pub struct HAClient {
 
 impl HAClient {
     pub fn new(
-        listener: UnixListener,
+        from_tui: Receiver<UserMsg>, 
+        to_tui: Sender<HaCliMsg>,
         start_time: std::time::Instant,
     ) -> Self {
         HAClient {
-            listener,
+            from_tui, 
+            to_tui,
             client: Self::init_client(),
             running: true,
             start_time,
@@ -72,19 +75,19 @@ impl HAClient {
         // body.iter().for_each(|entity| println!("{:?}", entity.context.clone()));
         self.print_debug_info("Fetched HA-Entitys");
 
-        // match self.to_tui.try_send(HaCliMsg::DATA {
-        //     0: CliMsg {
-        //         entitys: body.iter().map(|hae| hae.entity_id.clone()).collect(),
-        //         debug_data: "Sending Entitys...".to_string(),
-        //         dashboard: Dashboard::Dashboard_SciFi,
-        //     },
-        // }) {
-        //     Ok(_) => {}
-        //     Err(_) => {}
-        // }
+        match self.to_tui.try_send(HaCliMsg::DATA {
+            0: CliMsg {
+                entitys: body.iter().map(|hae| hae.entity_id.clone()).collect(),
+                debug_data: "Sending Entitys...".to_string(),
+                dashboard: Dashboard::Dashboard_SciFi,
+            },
+        }) {
+            Ok(_) => {}
+            Err(_) => {}
+        }
 
         // Listener für HA-Integration
-        //let mut listener = HaListener::new(8080).await;
+        let mut listener = HaListener::new(8080).await;
 
         // Tick für heartbeat
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
@@ -111,20 +114,16 @@ impl HAClient {
                 //     self.handle_ha_event(event).await;
                 // }
 
-                Ok((mut stream, _)) = self.listener.accept() => {
-                    println!("neuer Proband");
-                    let (mut xxx,mut yyy) = stream.into_split();
-                    println!("{:?}",yyy);
-                    println!("{:?}",xxx);
-        
-                    tokio::spawn(async move {
-                        tokio::time::sleep(
-                            tokio::time::Duration::from_secs(60)
-                        ).await;});
-                    // tokio::spawn(async move {
-                    //    self.handle_tui_connection(stream).await;
-                    // });
-                }
+                // Ok((mut stream, _)) = self.listener.accept() => {
+                //     println!("neuer Proband");
+                //
+                //     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                //     // tokio::spawn(async move {
+                //     //    self.handle_tui_connection(stream).await;
+                //     // });
+                //     stream.try_write(b"hello");
+                //     tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                // }
 
                 //TODO:
                 // fetch updates from website on a regular basis maybe? like A Watchdog for the connection or something
@@ -136,18 +135,18 @@ impl HAClient {
     }
 
 
-    async fn handle_tui_connection(&mut self, stream:UnixStream){
-        let (mut reader, mut writer) = stream.into_split();
-        let mut buffer = [0; 1024];
-
-        loop {
-            tokio::select! {
-                result = reader.read(&mut buffer) => {
-                    println!("result");
-                }
-            }
-        }
-    }
+    // async fn handle_tui_connection(&mut self, stream:UnixStream){
+    //     let (mut reader, mut writer) = stream.into_split();
+    //     let mut buffer = [0; 1024];
+    //
+    //     loop {
+    //         tokio::select! {
+    //             result = reader.read(&mut buffer) => {
+    //                 println!("result");
+    //             }
+    //         }
+    //     }
+    // }
 
     async fn heartbeat(&mut self) -> Option<i16> {
         self.print_debug_info("Heartbeat");

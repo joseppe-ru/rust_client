@@ -3,26 +3,37 @@ use tokio::net::UnixListener;
 
 pub mod ha_cli;
 pub mod listener;
-pub(crate) use ha_cli::HAClient;
+pub mod socket_cli;
+use self::ha_cli::HAClient;
+use self::socket_cli::SocketCli;
+use crate::models::SocketMessage;
+use tokio::sync::mpsc;
+
+
+use crate::models::{CliMsg, Dashboard, HaCliMsg, HaCliMsg::DATA, UserMsg};
 
 // helper Function to start HA-Client
 pub async fn run_ha_cli() -> eyre::Result<(), &'static str> {
 
     let time_start = std::time::Instant::now();
 
+    let (com_cli_tx, com_cli_rx) = mpsc::channel::<UserMsg>(10);
+    let (cli_com_tx, cli_com_rx) = mpsc::channel::<HaCliMsg>(10);
 
-    let socket_path = "/tmp/rust_client.sock";
-    
-    let _ = std::fs::remove_file(socket_path);
+    let mut com = SocketCli::new(cli_com_rx,com_cli_tx,time_start.clone());
+    let mut app = HAClient::new(com_cli_rx,cli_com_tx,time_start);
 
-    let listener = UnixListener::bind(socket_path).unwrap();
-    println!("Daemon bereit auf {}", socket_path);
+    tokio::select! {
+        _ = app.run() => {
+            println!("App hat sich beendet. InterCom wird automatisch abgebrochen.");
+        }
+        
+        _ = com.run() => {
+            println!("InterCom hat sich beendet. App wird automatisch abgebrochen.");
+        }
+    }
 
-    let mut app = HAClient::new(listener,time_start);
+    println!("System fährt herunter.");
 
-
-    println!("starting ha app");
-    
-    app.run().await.expect("ERROR: starting Homeassistant Client");
     Ok(())
 }

@@ -18,6 +18,7 @@ use ratatui::widgets::{
     Block, BorderType, Borders, List, ListDirection, ListItem, ListState, Paragraph, Widget, Wrap,
 };
 
+use crate::models::SocketMessage;
 // Konstanten bleiben gleich
 const RECT_COUNTS: [usize; 7] = [3, 1, 1, 0, 1, 2, 2];
 const RECT_COLOR: Color = Color::DarkGray;
@@ -35,8 +36,8 @@ enum InputModeE {
 // Klasse der TUI-APP mit Membervariablen
 pub struct TuiApp {
     running: bool,
-    writer: OwnedWriteHalf,
-    reader: OwnedReadHalf,
+    from_cli: Receiver<HaCliMsg>, 
+    to_cli: Sender<UserMsg>,
     input_mode: InputModeE,
     entities: Vec<String>,
     state: ListState,
@@ -50,15 +51,15 @@ pub struct TuiApp {
 
 impl TuiApp {
     pub fn new(
-    writer: OwnedWriteHalf,
-    reader: OwnedReadHalf,
+        from_cli: Receiver<HaCliMsg>, 
+        to_cli: Sender<UserMsg>,
         start_time: std::time::Instant,
     ) -> Self {
         // Return a new instance of TuiApp
         Self {
             running: false,
-            writer,
-            reader,
+            from_cli,
+            to_cli,
             input_mode: InputModeE::NORMAL,
             entities: Vec::new(),
             state: ListState::default(),
@@ -88,21 +89,22 @@ impl TuiApp {
                     self.handle_events(event).await;
                 }
                 
-                Ok(_) = self.reader.readable() => {
-                    
-                    match self.reader.try_read(&mut buffer) {
-                        Ok(0) => println!("EOF"),
-                        Ok(n) => println!("read {} bytes", n),
-                        Err(e) => println!("err {:?}", e),
-                    }
-    
-
-                    self.writer.try_write(b"Hallo");
-                }
-                //Nachrichten empfangen
-                // Some(msg) = self.from_ha.recv() => {
-                //     data = msg;
+                // Ok(_) = self.reader.readable() => {
+                //
+                //     match self.reader.try_read(&mut buffer) {
+                //         Ok(0) => println!("EOF"),
+                //         Ok(n) => println!("read {} bytes", n),
+                //         Err(e) => println!("err {:?}", e),
+                //     }
+                //
+                //
+                //     self.writer.try_write(b"Hallo");
                 // }
+                //Nachrichten empfangen
+                Some(msg) = self.from_cli.recv() => {
+                    data = msg;
+                    
+                }
             }
             terminal
                 .draw(|f| self.render(f, data.clone()))
