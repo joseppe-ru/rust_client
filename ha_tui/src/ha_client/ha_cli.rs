@@ -60,32 +60,6 @@ impl HAClient {
         // INITIALIZING
         // -----
 
-        let ha_url = "http://10.40.2.101:8123/api/states";
-        println!("Testing connection to HA...");
-        let response = self.client.get(ha_url).send().await.unwrap();
-
-        // TODO:
-        // Header auf Fehlercode analysieren
-
-        // convert body in a Rust structured Format
-        let body: Vec<HaEntity> = response.json::<Vec<HaEntity>>().await.unwrap();
-
-        // Filter for entitys (im interested in all switches and lights)
-
-        // body.iter().for_each(|entity| println!("{:?}", entity.context.clone()));
-        println!("Fetched HA-Entitys");
-
-        match self.to_tui.try_send(HaCliMsg::DATA {
-            0: CliMsg {
-                entitys: body.iter().map(|hae| hae.entity_id.clone()).collect(),
-                debug_data: "Sending Entitys...".to_string(),
-                dashboard: Dashboard::Dashboard_SciFi,
-            },
-        }) {
-            Ok(_) => {}
-            Err(_) => {}
-        }
-
         // Listener für HA-Integration
         let mut ha_listener = HaListener::new(8080).await;
 
@@ -97,10 +71,11 @@ impl HAClient {
             tokio::select! {
                 Some(msg) = self.from_tui.recv() => {
                     // Updating Entity List and send it
-                    // self.handle_incoming(msg);
+                    //
                     // send command
                     // receiving some Data
                     println!("got message from tui over socket");
+                    self.handle_incoming(msg).await;
                 }
 
                 i = interval.tick() => {
@@ -167,11 +142,40 @@ impl HAClient {
             .unwrap()
     }
 
-    fn handle_incoming(&mut self, msg: UserMsg) {
+    async fn get_entities(&mut self)->HaCliMsg{
+
+        let ha_url = "http://10.40.2.101:8123/api/states";
+        println!("Testing connection to HA...");
+        let response = self.client.get(ha_url).send().await.unwrap();
+
+        // TODO:
+        // Header auf Fehlercode analysieren
+
+        // convert body in a Rust structured Format
+        let body: Vec<HaEntity> = response.json::<Vec<HaEntity>>().await.unwrap();
+
+        // Filter for entitys (im interested in all switches and lights)
+
+        // body.iter().for_each(|entity| println!("{:?}", entity.context.clone()));
+        println!("Fetched HA-Entitys");
+
+        HaCliMsg::DATA {
+            0: CliMsg {
+                entitys: body.iter().map(|hae| hae.entity_id.clone()).collect(),
+                debug_data: "Sending Entitys...".to_string(),
+                dashboard: Dashboard::Dashboard_SciFi,
+            },
+        }
+
+    }
+
+    async fn handle_incoming(&mut self, msg: UserMsg) {
         match msg {
             UserMsg::TERMINATE => self.stop(),
-            UserMsg::RELOAD => {}
-            _ => (),
+            UserMsg::RESET => {
+                let entities = self.get_entities().await;
+                self.to_tui.try_send(entities).unwrap();},
+            _ => {println!("Komischer UserMsg-Typ");},
         }
     }
 
@@ -258,3 +262,5 @@ impl HAClient {
 fn shutdown(){
 
 }
+
+

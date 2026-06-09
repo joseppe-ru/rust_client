@@ -337,8 +337,7 @@ impl TuiApp {
     fn put_char(&mut self, k: KeyCode) {}
 
     async fn send_to_ha(&mut self, msg: UserMsg) {
-        //self.to_ha.send(msg).await;
-    //TODO? was wollte ich hier machen?
+        self.to_cli.send(msg).await;
     }
 
     async fn stop(&mut self) {

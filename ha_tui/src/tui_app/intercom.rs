@@ -1,3 +1,4 @@
+use tokio::io::AsyncWriteExt;
 use crate::models::SocketMessage;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::net::UnixStream;
@@ -38,16 +39,28 @@ impl InterCom {
             tokio::select! {
                 // 1. Nachrichten von der TUI empfangen
                 Some(msg) = self.tui_rx.recv() => {
-                    self.print_debug_info("Neue Nachricht erhalten");
+                    self.print_debug_info("neues Senden");
+                    let mut erno :String ="---".to_string();
                     if let Some(sock) = &mut self.sock {
                         // Beispiel: Nachricht an Socket senden
                         // if let Err(e) = sock.write_all(b"Daten").await {
                         //     println!("Socket Schreibfehler: {:?}", e);
                         //     self.sock = None; // Bei Fehler Verbindung trennen
                         // }
-                    } else {
-                        self.print_debug_info("Socket not connected");
+                        let sock_msg = SocketMessage::UserAction(msg.clone());
+
+                        let data = postcard::to_allocvec(&sock_msg).unwrap();
+
+                        erno=format!("{}", data.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" "));
+
+                        sock.write_all(&data).await;
+
                     }
+                        else {
+                        self.print_debug_info("Socket not connected");
+                        }
+                    self.print_debug_info(&erno);
+
                 }
 
                 read_ready_result = async {
@@ -68,7 +81,20 @@ impl InterCom {
                                 Ok(n) => {
                             
                                     self.print_debug_info(&format!("Gelesen: {} bytes", n));
-                                    // TODO: Gelesene Bytes parsen und an self.tui_tx senden
+                                    self.print_debug_info(&format!("{}", buffer.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" ")));
+
+                                        // take_from_bytes gibt uns die Nbufferachricht UND den Rest des Slices zurück!
+                                        match postcard::take_from_bytes::<SocketMessage>(&buffer) {
+                                            Ok((msg, remaining_bytes)) => {
+
+                                                match msg {
+                                                    SocketMessage::HaData(data)=>{self.tui_tx.try_send(data);},
+                                                    SocketMessage::UserAction(_str) => {self.print_debug_info("wrong SocketMessage type");}
+                                                }
+                                            }
+                                            Err(e) => {self.print_debug_info(&e.to_string())}
+                                        }
+
                                 }
                                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                                     // False positive: Das Event wurde ausgelöst, aber es gibt (noch) keine Daten.
@@ -128,3 +154,5 @@ impl InterCom {
         //senden
     }
 }
+
+
