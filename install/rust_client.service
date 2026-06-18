@@ -1,0 +1,11 @@
+[Unit]
+Description=Startet den Rust-Client Daemon für Homeassistant
+
+[Service]
+Type=oneshot
+ExecStart=/home/hyprjo/services/rust-client/daemon
+RemainAfterExit=true
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
