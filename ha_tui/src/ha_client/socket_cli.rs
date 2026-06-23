@@ -6,6 +6,7 @@ use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::broadcast;
 use tokio::sync::mpsc::{Receiver, Sender};
 use crate::models::{HaCliMsg, SocketMessage, UserMsg};
+use log::{info, warn, error, debug};
 
 pub struct SocketCli{
     running: bool,
@@ -40,7 +41,7 @@ impl SocketCli{
         while self.running{
             tokio::select!{
                 Some(msg) = self.cli_rx.recv() => {
-                    println!("neue Nachricht vom CLI");
+                    info!("neue Nachricht vom CLI");
                     // serde msg
                     // send msg
                     let _ = tx.send(msg);
@@ -48,7 +49,7 @@ impl SocketCli{
                 }
 
                 Ok((mut stream, addr)) = listener.accept() => {
-                    println!("neuer Proband");
+                    info!("neuer Proband");
                     let tx_clone = tx.clone();
                     let rx_clone = tx.subscribe();
                     let cli_tx_clone = self.cli_tx.clone();
@@ -81,20 +82,20 @@ async fn client_handler(mut stream: UnixStream, mut rx: broadcast::Receiver<HaCl
             // serde
             match postcard::to_allocvec(&sock_msg) {
                 Ok(binary_bytes) => {
-                    println!("{}", binary_bytes.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" "));
+                    info!("{}", binary_bytes.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" "));
                     match postcard::take_from_bytes::<SocketMessage>(&binary_bytes) {
                         Ok((msg, remaining_bytes)) => {
-                            println!("Serialisierung erfolgreich deserialisier");
+                            info!("Serialisierung erfolgreich deserialisier");
 
                         }
-                        Err(e) => {println!("doch nicht erfolgreich: {}",e)}
+                        Err(e) => {info!("doch nicht erfolgreich: {}",e)}
                     }
                     // Bytes per Framed-Writer senden
                     if writer.write_all(&binary_bytes).await.is_err() {
                         break;
                     }
                 }
-                Err(e) => eprintln!("Fehler beim Serialisieren mit Postcard: {}", e),
+                Err(e) => error!("Fehler beim Serialisieren mit Postcard: {}", e),
             }
         }
     });
@@ -107,25 +108,25 @@ async fn client_handler(mut stream: UnixStream, mut rx: broadcast::Receiver<HaCl
             if read_ready_result.is_ok() {
                 match reader.try_read(&mut buffer) {
                     Ok(0) => {
-                        println!("Client disconnected");
+                        info!("Client disconnected");
                         return
                     }
                     Ok(n) => {
-                        println!("Gelesen: {} bytes", n);
+                        info!("Gelesen: {} bytes", n);
 
-                        println!("{}", buffer.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" "));
+                        info!("{}", buffer.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" "));
 
                         // take_from_bytes gibt uns die Nachricht UND den Rest des Slices zurück!
                         match postcard::take_from_bytes::<SocketMessage>(&buffer) {
                             Ok((msg, remaining_bytes)) => {
-                                println!("remaining Bytes: {}",remaining_bytes.len());
+                                info!("remaining Bytes: {}",remaining_bytes.len());
 
                                 match msg {
-                                    SocketMessage::HaData(data)=>{println!("Wrong SocketMessages type")},
+                                    SocketMessage::HaData(data)=>{info!("Wrong SocketMessages type")},
                                     SocketMessage::UserAction(data) => {tx.try_send(data);}
                                 }
                             }
-                            Err(e) => {println!("{}",e)}
+                            Err(e) => {info!("{}",e)}
                         }
 
                     }
@@ -147,6 +148,6 @@ async fn client_handler(mut stream: UnixStream, mut rx: broadcast::Receiver<HaCl
         _ = &mut write_task => read_task.abort(),
     }
 
-    println!("TUI-Client getrennt und Handler beendet.");
+    info!("TUI-Client getrennt und Handler beendet.");
 
 }

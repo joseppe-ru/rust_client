@@ -9,12 +9,12 @@ use self::socket_cli::SocketCli;
 use crate::models::SocketMessage;
 use tokio::sync::mpsc;
 
+use log::{info, warn, error, debug};
 
 use crate::models::{CliMsg, Dashboard, HaCliMsg, HaCliMsg::DATA, UserMsg};
 
 // helper Function to start HA-Client
 pub async fn run_ha_cli() -> eyre::Result<(), &'static str> {
-
     let time_start = std::time::Instant::now();
 
     let (com_cli_tx, com_cli_rx) = mpsc::channel::<UserMsg>(10);
@@ -25,15 +25,15 @@ pub async fn run_ha_cli() -> eyre::Result<(), &'static str> {
 
     tokio::select! {
         _ = app.run() => {
-            println!("App hat sich beendet. InterCom wird automatisch abgebrochen.");
+            info!("App hat sich beendet. InterCom wird automatisch abgebrochen.");
         }
         
         _ = com.run() => {
-            println!("InterCom hat sich beendet. App wird automatisch abgebrochen.");
+            info!("InterCom hat sich beendet. App wird automatisch abgebrochen.");
         }
     }
 
-    println!("System fährt herunter.");
+    info!("System fährt herunter.");
 
     Ok(())
 }

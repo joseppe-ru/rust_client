@@ -2,6 +2,7 @@ use axum::{Json, Router, extract::State, routing::post};
 use serde::Deserialize;
 use std::net::SocketAddr;
 use tokio::sync::mpsc;
+use log::{info, warn, error, debug};
 
 // 1. Die Struktur der Daten, die HA uns per POST sendet
 #[derive(Debug, Deserialize, Clone)]
@@ -50,7 +51,7 @@ async fn handle_webhook(
 ) -> &'static str {
     // Sende das Event in den Channel zur Main-Loop
     if let Err(e) = tx.send(payload).await {
-        eprintln!("Fehler beim Senden des Events an die Main-Loop: {}", e);
+        error!("Fehler beim Senden des Events an die Main-Loop: {}", e);
     }
 
     // Antworte Home Assistant mit 200 OK
