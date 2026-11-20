@@ -19,6 +19,8 @@
         cargoLock = {
           lockFile = ./ha_tui/Cargo.lock;
         };
+	nativeBuildInputs = [ pkgs.pkg-config ];
+	buildInputs = [ pkgs.openssl ];
 
         postInstall = ''
           mv $out/bin/tui $out/bin/ha-tui
